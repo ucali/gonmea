@@ -14,10 +14,6 @@ const (
 	STATE_CHECKING = 3
 )
 
-//NOTE: all close call on channels are related to the block operation for geoubu message transaction,
-//		review for a continuous NMEA stream
-
-//-------------------------------------------
 // Parser
 
 type Parser struct {
@@ -164,19 +160,6 @@ type Builder struct {
 }
 
 func (b *Builder) Process() {
-	run := true
-	for run == true {
-		select {
-		case message := <-b.Input:
-			s := NewSentenceFromString(message)
-			b.Output <- s
-			break
-		case <-b.Quit:
-			run = false
-			break
-		}
-	}
-
 	for message := range b.Input {
 		s := NewSentenceFromString(message)
 		b.Output <- s
@@ -205,14 +188,12 @@ type Pipeline struct {
 func (p *Pipeline) Create() {
 	p.Raw = make(chan string, 100)
 	p.Output = make(chan *Sentence, 100)
-	p.Quit = make(chan int)
 
 	p.Parser = &Parser{Output: p.Raw}
 
 	p.Builder = &Builder{
 		Input:  p.Raw,
 		Output: p.Output,
-		Quit:   p.Quit,
 	}
 
 	go p.Builder.Process()
@@ -227,7 +208,6 @@ func (p *Pipeline) Push(data []byte) (uint64, error) {
 }
 
 func (p *Pipeline) Close() {
-	p.Quit <- 1
 	close(p.Raw)
 
 }
