@@ -9,10 +9,53 @@ import (
 )
 
 const (
-	STATE_OPEN     = 1
-	STATE_CLOSED   = 2
-	STATE_CHECKING = 3
+	stateOpen     = 1
+	stateClosed   = 2
+	stateChecking = 3
 )
+
+//-------------------------------------------------------
+// Pipeline
+
+func NewPipeline() (p *Pipeline) {
+	p = &Pipeline{}
+	p.create()
+	return p
+}
+
+type Pipeline struct {
+	parser  *parser
+	builder *builder
+
+	Raw    chan string
+	Output chan *Sentence
+	Quit   chan int
+}
+
+func (p *Pipeline) create() {
+	p.Raw = make(chan string, 100)
+	p.Output = make(chan *Sentence, 100)
+
+	p.parser = &parser{Output: p.Raw}
+
+	p.builder = &builder{
+		Input:  p.Raw,
+		Output: p.Output,
+	}
+
+	go p.builder.Process()
+}
+
+func (p *Pipeline) Push(data []byte) (uint64, error) {
+	buf := bytes.NewBuffer(data)
+
+	return p.parser.Parse(buf)
+}
+
+func (p *Pipeline) Close() {
+	close(p.Raw)
+
+}
 
 // parser
 
@@ -28,11 +71,11 @@ type parser struct {
 
 func (p *parser) Add(b byte) {
 	switch p.State {
-	case STATE_OPEN:
+	case stateOpen:
 		p.Sentence += string(b) //TODO: use bytes buffer
 		p.checksum = p.checksum ^ b
 		break
-	case STATE_CHECKING:
+	case stateChecking:
 		p.expectedChecksum += string(b)
 
 		if len(p.expectedChecksum) == 2 {
@@ -44,14 +87,12 @@ func (p *parser) Add(b byte) {
 			if strings.ToUpper(str) == p.expectedChecksum {
 				p.Output <- p.Sentence
 				p.Count++
-			} /* else {
-				fmt.Println("ERROR (", p.Sentence, ")", p.expectedChecksum, "!=", str)
-			}*/
+			}
 
-			p.State = STATE_CLOSED
+			p.State = stateClosed
 		}
 		break
-	case STATE_CLOSED:
+	case stateClosed:
 		break
 	default:
 		break
@@ -61,15 +102,15 @@ func (p *parser) Add(b byte) {
 func (p *parser) Push(b byte) {
 	switch b {
 	case 36: //$
-		p.State = STATE_OPEN
+		p.State = stateOpen
 
 		p.Sentence = ""
 		p.checksum = 0
 		p.expectedChecksum = ""
 		break
 	case 42: //*
-		if p.State == STATE_OPEN {
-			p.State = STATE_CHECKING
+		if p.State == stateOpen {
+			p.State = stateChecking
 			p.expectedChecksum = ""
 		}
 		break
@@ -80,12 +121,7 @@ func (p *parser) Push(b byte) {
 }
 
 func (parser *parser) Parse(input *bytes.Buffer) (uint64, error) {
-	return parser.ParseInto(input, parser.Output)
-}
-
-func (parser *parser) ParseInto(input *bytes.Buffer, out chan string) (uint64, error) {
-	parser.State = STATE_CLOSED
-	parser.Output = out //TODO (FIXME)
+	parser.State = stateClosed
 
 	b, err := input.ReadByte()
 	for err == nil {
@@ -93,13 +129,12 @@ func (parser *parser) ParseInto(input *bytes.Buffer, out chan string) (uint64, e
 		b, err = input.ReadByte()
 	}
 
-	parser.State = STATE_CLOSED //reset state
+	parser.State = stateClosed //reset state
 
 	if err != io.EOF { //EOF is ok, all other errors are not
 		return parser.Count, err
-	} else {
-		return parser.Count, nil
 	}
+	return parser.Count, nil
 }
 
 func Checksum(sentence string) string {
@@ -164,49 +199,4 @@ func (b *builder) Process() {
 		b.Output <- s
 	}
 	close(b.Output)
-}
-
-//-------------------------------------------------------
-// Pipeline
-
-func NewPipeline() (p *Pipeline) {
-	p = &Pipeline{}
-	p.create()
-	return p
-}
-
-type Pipeline struct {
-	parser  *parser
-	builder *builder
-
-	Raw    chan string
-	Output chan *Sentence
-	Quit   chan int
-}
-
-func (p *Pipeline) create() {
-	p.Raw = make(chan string, 100)
-	p.Output = make(chan *Sentence, 100)
-
-	p.parser = &parser{Output: p.Raw}
-
-	p.builder = &builder{
-		Input:  p.Raw,
-		Output: p.Output,
-	}
-
-	go p.builder.Process()
-}
-
-func (p *Pipeline) Push(data []byte) (uint64, error) {
-	buf := bytes.NewBuffer(data)
-
-	c, err := p.parser.Parse(buf)
-
-	return c, err
-}
-
-func (p *Pipeline) Close() {
-	close(p.Raw)
-
 }
