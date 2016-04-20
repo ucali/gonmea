@@ -1,1 +1,1 @@
-# gonmea
+# simple golang nmea lib
