@@ -171,7 +171,7 @@ func (b *Builder) Process() {
 // Pipeline
 
 func NewPipeline() (p *Pipeline) {
-	p = new(Pipeline)
+	p = &Pipeline{}
 	p.Create()
 	return p
 }
