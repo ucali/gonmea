@@ -14,9 +14,9 @@ const (
 	STATE_CHECKING = 3
 )
 
-// Parser
+// parser
 
-type Parser struct {
+type parser struct {
 	State    int
 	Sentence string
 	Count    uint64
@@ -26,7 +26,7 @@ type Parser struct {
 	expectedChecksum string
 }
 
-func (p *Parser) Add(b byte) {
+func (p *parser) Add(b byte) {
 	switch p.State {
 	case STATE_OPEN:
 		p.Sentence += string(b) //TODO: use bytes buffer
@@ -58,7 +58,7 @@ func (p *Parser) Add(b byte) {
 	}
 }
 
-func (p *Parser) Push(b byte) {
+func (p *parser) Push(b byte) {
 	switch b {
 	case 36: //$
 		p.State = STATE_OPEN
@@ -79,11 +79,11 @@ func (p *Parser) Push(b byte) {
 	}
 }
 
-func (parser *Parser) Parse(input *bytes.Buffer) (uint64, error) {
+func (parser *parser) Parse(input *bytes.Buffer) (uint64, error) {
 	return parser.ParseInto(input, parser.Output)
 }
 
-func (parser *Parser) ParseInto(input *bytes.Buffer, out chan string) (uint64, error) {
+func (parser *parser) ParseInto(input *bytes.Buffer, out chan string) (uint64, error) {
 	parser.State = STATE_CLOSED
 	parser.Output = out //TODO (FIXME)
 
@@ -151,15 +151,14 @@ func (s *Sentence) FromString(sentence string) {
 }
 
 //----------------------------------------------------------
-// Builder
+// builder
 
-type Builder struct {
+type builder struct {
 	Input  chan string
 	Output chan *Sentence
-	Quit   chan int
 }
 
-func (b *Builder) Process() {
+func (b *builder) Process() {
 	for message := range b.Input {
 		s := NewSentenceFromString(message)
 		b.Output <- s
@@ -177,8 +176,8 @@ func NewPipeline() (p *Pipeline) {
 }
 
 type Pipeline struct {
-	Parser  *Parser
-	Builder *Builder
+	parser  *parser
+	builder *builder
 
 	Raw    chan string
 	Output chan *Sentence
@@ -189,20 +188,20 @@ func (p *Pipeline) create() {
 	p.Raw = make(chan string, 100)
 	p.Output = make(chan *Sentence, 100)
 
-	p.Parser = &Parser{Output: p.Raw}
+	p.parser = &parser{Output: p.Raw}
 
-	p.Builder = &Builder{
+	p.builder = &builder{
 		Input:  p.Raw,
 		Output: p.Output,
 	}
 
-	go p.Builder.Process()
+	go p.builder.Process()
 }
 
 func (p *Pipeline) Push(data []byte) (uint64, error) {
 	buf := bytes.NewBuffer(data)
 
-	c, err := p.Parser.Parse(buf)
+	c, err := p.parser.Parse(buf)
 
 	return c, err
 }
