@@ -172,7 +172,7 @@ func (b *Builder) Process() {
 
 func NewPipeline() (p *Pipeline) {
 	p = &Pipeline{}
-	p.Create()
+	p.create()
 	return p
 }
 
@@ -185,7 +185,7 @@ type Pipeline struct {
 	Quit   chan int
 }
 
-func (p *Pipeline) Create() {
+func (p *Pipeline) create() {
 	p.Raw = make(chan string, 100)
 	p.Output = make(chan *Sentence, 100)
 
