@@ -71,9 +71,11 @@ func Test_message(t *testing.T) {
 func Test_pipeline(t *testing.T) {
 	p := NewPipeline()
 
-	b := []byte("$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47$GPGSA,A,3,04,05,,09,12*,,,24.1*39\r\nagafgsa$$$$$fgsfgafga$GPGSA,A,3,04,05,,09,12,,,24,,,,,2.5,1.3,2.1*39")
+	b := []byte("çsd+è$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47$GPGSA,A,3,04,05,,09,12*,,,24.1*39\r\nagafgsa$$$$$fgsfgafga$GPGSA,A,3,04,05,,09,12,,,24,,,,,2.5,1.3,2.1*39")
+	p.Push(b)
 	p.Push(b)
 	p.Close()
+	
 
 	s := <-p.Output
 	assert.NotNil(t, s)

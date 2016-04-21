@@ -2,7 +2,6 @@ package nmea
 
 import (
 	"bytes"
-	//"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -29,7 +28,6 @@ type Pipeline struct {
 
 	Raw    chan string
 	Output chan *Sentence
-	Quit   chan int
 }
 
 func (p *Pipeline) create() {
@@ -61,40 +59,36 @@ func (p *Pipeline) Close() {
 
 type parser struct {
 	State    int
-	Sentence string
+	Sentence bytes.Buffer
 	Count    uint64
 	Output   chan string
 
 	checksum         byte
-	expectedChecksum string
+	expectedChecksum bytes.Buffer
 }
 
 func (p *parser) Add(b byte) {
 	switch p.State {
 	case stateOpen:
-		p.Sentence += string(b) //TODO: use bytes buffer
+		p.Sentence.WriteByte(b) //TODO: use bytes buffer
 		p.checksum = p.checksum ^ b
-		break
 	case stateChecking:
-		p.expectedChecksum += string(b)
+		p.expectedChecksum.WriteByte(b)
 
-		if len(p.expectedChecksum) == 2 {
+		if p.expectedChecksum.Len() == 2 {
 			str := strconv.FormatUint(uint64(p.checksum), 16)
 			if len(str) == 1 {
 				str = "0" + str
 			}
 
-			if strings.ToUpper(str) == p.expectedChecksum {
-				p.Output <- p.Sentence
+			if strings.ToUpper(str) == p.expectedChecksum.String() {
+				p.Output <- p.Sentence.String()
 				p.Count++
 			}
 
 			p.State = stateClosed
 		}
-		break
 	case stateClosed:
-		break
-	default:
 		break
 	}
 }
@@ -103,38 +97,34 @@ func (p *parser) Push(b byte) {
 	switch b {
 	case 36: //$
 		p.State = stateOpen
-
-		p.Sentence = ""
 		p.checksum = 0
-		p.expectedChecksum = ""
-		break
+
+		p.Sentence.Reset()
+		p.expectedChecksum.Reset()
 	case 42: //*
 		if p.State == stateOpen {
 			p.State = stateChecking
-			p.expectedChecksum = ""
 		}
-		break
 	default:
 		p.Add(b)
-		break
 	}
 }
 
-func (parser *parser) Parse(input *bytes.Buffer) (uint64, error) {
-	parser.State = stateClosed
+func (p *parser) Parse(input *bytes.Buffer) (uint64, error) {
+	p.State = stateClosed
 
 	b, err := input.ReadByte()
 	for err == nil {
-		parser.Push(b)
+		p.Push(b)
 		b, err = input.ReadByte()
 	}
 
-	parser.State = stateClosed //reset state
+	p.State = stateClosed //reset state
 
-	if err != io.EOF { //EOF is ok, all other errors are not
-		return parser.Count, err
+	if err == io.EOF { //EOF is ok, all other errors are not
+		return p.Count, nil
 	}
-	return parser.Count, nil
+	return p.Count, err
 }
 
 func Checksum(sentence string) string {
